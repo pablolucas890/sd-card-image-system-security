@@ -1,0 +1,83 @@
+{{- $mirror := or .mirror "http://deb.debian.org/debian" -}}
+{{- $suite := or .suite "bullseye" -}}
+{{- $board := or .board "" -}}
+{{- $root_passwd := or .root_passwd "" -}}
+{{- $wifi_ssid := or .wifi_ssid "" -}}
+{{- $wifi_passwd := or .wifi_passwd "" -}}
+
+{{ if eq $board "orangepi" }}
+architecture: armhf
+{{ end }}
+{{ if eq $board "raspberrypi" }}
+architecture: arm64
+{{ end }}
+
+actions:
+
+  # Download debian
+  - action: debootstrap
+    suite: {{ $suite }}
+    components:
+      - main
+      - contrib
+      - non-free
+    mirror: {{ $mirror }}
+    variant: minbase
+
+  #install Extra Packages
+  - action: apt
+    description: Install common packages
+    packages:
+      - ca-certificates
+      - dbus-user-session
+      - iproute2
+      - libnss-resolve
+      - resolvconf
+      - openssh-server
+      - systemd-sysv
+      - vim-tiny
+      - screen
+      - python3-pip
+      - python-dev
+      - libffi-dev
+      - libssl-dev
+      - tzdata
+      - cron
+      - apparmor
+      - make
+      - g++
+      - systemd-timesyncd
+      - openvpn
+      - cloud-guest-utils # to execute resize imagem
+      - fdisk # to execute resize imagem
+
+
+  - action: overlay
+    source: overlays/etc
+    destination: /etc
+
+  - action: overlay
+    source: overlays/networkd
+
+  - action: run
+    description: Add hostname
+    chroot: true
+    command: echo {{ $board }} > /etc/hostname
+
+  - action: run
+    description: Set root passwd
+    chroot: true
+    command: echo "root:{{ $root_passwd }}" | chpasswd
+
+  - action: overlay
+    description: Install configuration files
+    source: overlays/config
+
+  - action: run
+    description: Execute script
+    chroot: true
+    script: scripts/setup.sh {{ $wifi_ssid }} {{ $wifi_passwd }}
+
+  # Recipe action to use the especific actions to the
+  - action: recipe
+    recipe: {{ $board }}.yaml

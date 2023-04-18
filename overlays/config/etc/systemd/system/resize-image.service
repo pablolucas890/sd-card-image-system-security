@@ -1,0 +1,10 @@
+[Unit]
+Description = Resize Service
+After = network.target
+
+[Service]
+Type = oneshot
+ExecStart = /bin/bash /configs/resize-image.sh
+
+[Install]
+WantedBy = multi-user.target

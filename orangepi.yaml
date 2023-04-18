@@ -1,0 +1,80 @@
+{{- $kernel := or .kernel "linux-image-current-sunxi" -}}
+{{- $dtb := or .dtb "linux-dtb-current-sunxi" -}}
+{{- $u_boot_version := or .u_boot_version "22.05.3" -}}
+{{- $u_boot_package := or .u_boot_package (printf "linux-u-boot-orangepipc-current=%s" $u_boot_version) -}}
+
+architecture: armhf
+
+actions:
+
+  - action: apt
+    description: Install orangepi packages
+    packages:
+      - gcc-arm-linux-gnueabihf
+      - python3-dev
+      - rustc
+      - cargo
+      - python3-cryptography
+      - sudo
+      - adduser
+      - systemd-sysv
+      - initramfs-tools
+      - u-boot-tools
+      - u-boot-menu
+      - util-linux
+      - sunxi-tools
+
+  - action: overlay
+    source: overlays/armbian
+
+  - action: apt
+    description: Install Kernell, armbian packages, DTB and U-Boot
+    packages:
+      - {{ $kernel }}
+      - {{ $dtb }}
+      - {{ $u_boot_package }}
+      - armbian-bsp-cli-orangepipc
+      - armbian-config
+
+  - action: run
+    chroot: true
+    script: scripts/setup-networking.sh
+
+  - action: image-partition
+    description: Create Partitions
+    imagename: image-orangepi-debian.img
+    imagesize: 4GB
+    partitiontype: msdos
+    mountpoints:
+      - mountpoint: /
+        partition: root
+    partitions:
+      - name: root
+        fs: ext4
+        start: 2MB
+        end: 100%
+        flags: [ boot ]
+  # TODO update size image
+
+  - action: filesystem-deploy
+    description: Deploying filesystem onto image
+
+  # U-boot-menu expects FDT directory name to include the kernel version as
+  # returned by linux-version.
+  - action: run
+    chroot: true
+    command: ln -s {{ $kernel }} /usr/lib/linux-image-$(linux-version list)
+
+  # Update U-Boot menu after creation of image partitions and filesystem
+  # deployment to get correct root information from /etc/fstab
+  - action: run
+    description: Update U-Boot menu
+    chroot: true
+    command: u-boot-update
+
+  # Armbian encode a version number in path to u-boot binaries, 5.75 at time I write this blog, this may need to be changed
+  - action: raw
+    origin: filesystem
+    description: Raw do arquivo bin
+    source: /usr/lib/linux-u-boot-current-orangepipc_{{ $u_boot_version }}_armhf/u-boot-sunxi-with-spl.bin
+    offset: 8192 # bs=8k seek=1
